@@ -2,7 +2,7 @@ namespace ManualMate.Infrastructure.Messaging.Outbox;
 
 public class OutboxMessage
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public int Id { get; set; }
     public string Type { get; set; } = string.Empty;
     public string RoutingKey { get; set; } = string.Empty;
     public string Payload { get; set; } = string.Empty;

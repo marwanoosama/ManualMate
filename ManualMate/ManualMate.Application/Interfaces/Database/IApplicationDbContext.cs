@@ -1,5 +1,6 @@
 ﻿using ManualMate.Domain.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace ManualMate.Application.Interfaces
 {
@@ -9,5 +10,7 @@ namespace ManualMate.Application.Interfaces
         public DbSet<FileEmbedding> FileEmbeddings { get; }
 
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+
+        Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
     }
 }

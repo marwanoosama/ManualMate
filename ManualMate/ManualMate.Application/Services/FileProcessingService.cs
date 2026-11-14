@@ -14,7 +14,7 @@ namespace ManualMate.Application.Services
         ITextChunker textChunker)
         : IFileProcessingService
     {
-        public async Task<Result<bool>> ProcessFileAsync(Guid itemId)
+        public async Task<Result<bool>> ProcessFileAsync(int itemId)
         {
             var item = await dbContext.Items.FindAsync(itemId);
             if (item is null)
@@ -60,7 +60,7 @@ namespace ManualMate.Application.Services
             return Result<bool>.Ok(true);
         }
 
-        public async Task<Result<bool>> DeleteFileEmbeddingsAsync(Guid itemId)
+        public async Task<Result<bool>> DeleteFileEmbeddingsAsync(int itemId)
         {
             var item = await dbContext.Items.FindAsync(itemId);
 

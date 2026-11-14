@@ -42,8 +42,8 @@ namespace ManualMate.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("vector(512)");
 
-                    b.Property<Guid>("ItemId")
-                        .HasColumnType("uuid");
+                    b.Property<int>("ItemId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("TextChunk")
                         .IsRequired()
@@ -58,9 +58,11 @@ namespace ManualMate.Infrastructure.Migrations
 
             modelBuilder.Entity("ManualMate.Domain.Models.Item", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Description")
                         .IsRequired()
@@ -87,9 +89,11 @@ namespace ManualMate.Infrastructure.Migrations
 
             modelBuilder.Entity("ManualMate.Infrastructure.Messaging.Outbox.OutboxMessage", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("Attempts")
                         .HasColumnType("integer");

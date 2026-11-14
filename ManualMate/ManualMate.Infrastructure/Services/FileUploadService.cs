@@ -1,7 +1,9 @@
 using System.Net;
+using ManualMate.Application.Contracts;
 using ManualMate.Application.Interfaces;
 using ManualMate.Application.Interfaces.Services;
 using ManualMate.Application.Responses;
+using ManualMate.Domain.Enums;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -18,21 +20,24 @@ namespace ManualMate.Infrastructure.Services
         private const long MaxFileSizeInBytes = 50 * 1024 * 1024;
 
         private readonly IApplicationDbContext _dbContext;
+        private readonly IOutboxService _outboxService;
         private readonly IHostEnvironment _environment;
         private readonly ILogger<FileUploadService> _logger;
         private readonly string _filesDirectory;
 
         public FileUploadService(IApplicationDbContext dbContext,
+            IOutboxService outboxService,
             IHostEnvironment environment,
             ILogger<FileUploadService> logger)
         {
             _dbContext = dbContext;
+            _outboxService = outboxService;
             _environment = environment;
             _logger = logger;
             _filesDirectory = Path.Combine(_environment.ContentRootPath, "wwwroot", "Files");
         }
 
-        public async Task<Result<string>> UploadItemFileAsync(Guid itemId, IFormFile file, CancellationToken cancellationToken = default)
+        public async Task<Result<string>> UploadItemFileAsync(int itemId, IFormFile file, CancellationToken cancellationToken = default)
         {
             var validationError = ValidateFile(file);
             if (validationError is not null)
@@ -40,7 +45,7 @@ namespace ManualMate.Infrastructure.Services
                 return Result<string>.Fail(validationError.Value.Error, validationError.Value.StatusCode);
             }
 
-            var item = await _dbContext.Items.FindAsync(new object?[] { itemId }, cancellationToken);
+            var item = await _dbContext.Items.FindAsync(itemId, cancellationToken);
             if (item is null)
             {
                 return Result<string>.Fail($"Item with id : {itemId} not found", HttpStatusCode.NotFound);
@@ -56,12 +61,13 @@ namespace ManualMate.Infrastructure.Services
                 await SaveFileAsync(file, filePath, cancellationToken);
 
                 item.FilePath = filePath;
+                item.Status = ItemStatus.Pending;
                 item.LastUpdated = DateTime.UtcNow;
+                _outboxService.Enqueue(new ItemCreatedMessage { ItemId = item.Id }, ItemCreatedMessage.RoutingKey);
 
                 await _dbContext.SaveChangesAsync(cancellationToken);
-
                 await DeleteFileBestEffortAsync(oldFilePath, cancellationToken);
-
+                
                 return Result<string>.Ok(filePath);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

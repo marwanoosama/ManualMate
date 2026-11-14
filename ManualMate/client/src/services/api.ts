@@ -19,7 +19,7 @@ export const itemApi = {
     return response.data.data;
   },
 
-  getById: async (id: string): Promise<Item> => {
+  getById: async (id: number): Promise<Item> => {
     const response = await api.get<ApiResponse<Item>>(`/item/${id}`);
     return response.data.data;
   },
@@ -40,7 +40,7 @@ export const itemApi = {
     return response.data.data;
   },
 
-  update: async (id: string, item: CreateItemDto): Promise<Item> => {
+  update: async (id: number, item: CreateItemDto): Promise<Item> => {
     const formData = new FormData();
     formData.append('name', item.name);
     formData.append('description', item.description);
@@ -56,12 +56,12 @@ export const itemApi = {
     return response.data.data;
   },
 
-  delete: async (id: string): Promise<boolean> => {
+  delete: async (id: number): Promise<boolean> => {
     const response = await api.delete<ApiResponse<boolean>>(`/item/${id}`);
     return response.data.data;
   },
 
-  ask: async (itemId: string, question: string): Promise<string> => {
+  ask: async (itemId: number, question: string): Promise<string> => {
     const response = await api.get<ApiResponse<string>>(
       `/item/ask/${itemId}`,
       {

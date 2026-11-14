@@ -105,7 +105,7 @@ public sealed class ItemCreatedConsumer(
         var dbContext = scope.ServiceProvider.GetRequiredService<ManualMateDbContext>();
         var fileProcessingService = scope.ServiceProvider.GetRequiredService<IFileProcessingService>();
 
-        var item = await dbContext.Items.FindAsync([message.ItemId], cancellationToken);
+        var item = await dbContext.Items.FindAsync(message.ItemId, cancellationToken);
 
         if (item is null)
         {

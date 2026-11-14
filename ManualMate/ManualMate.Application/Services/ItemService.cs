@@ -18,7 +18,7 @@ namespace ManualMate.Application.Services
         : IItemService
     {
 
-        public async Task<Result<GetItemDto>> GetItemAsync(Guid id)
+        public async Task<Result<GetItemDto>> GetItemAsync(int id)
         {
             var item = await dbContext.Items.FindAsync(id);
             if (item is null) return Result<GetItemDto>.Fail("item Not Found", HttpStatusCode.NotFound);
@@ -55,7 +55,7 @@ namespace ManualMate.Application.Services
             return Result<CreateItemDto>.Ok(dto);
         }
 
-        public async Task<Result<GetItemDto>> EditItemAsync(Guid id, UpdateItemDto dto)
+        public async Task<Result<GetItemDto>> EditItemAsync(int id, UpdateItemDto dto)
         {
             var item = await dbContext.Items.FindAsync(id);
             if (item is null)
@@ -70,7 +70,7 @@ namespace ManualMate.Application.Services
             return Result<GetItemDto>.Ok(itemToReturn);
         }
 
-        public async Task<Result<bool>> DeleteAsync(Guid id)
+        public async Task<Result<bool>> DeleteAsync(int id)
         {
             var item = await dbContext.Items.FindAsync(id);
             if (item is null)

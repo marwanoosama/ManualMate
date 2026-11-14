@@ -8,8 +8,8 @@ namespace ManualMate.Controllers
     [ApiController]
     public class QaController(IQaService qaService) : ControllerBase
     {
-        [HttpGet("ask/{itemId:guid}")]
-        public async Task<IActionResult> Ask(Guid itemId, string question)
+        [HttpGet("ask/{itemId:int}")]
+        public async Task<IActionResult> Ask(int itemId, string question)
         {
             var result = await qaService.GetAnswerAsync(itemId, question);
             return this.GetResponse(result);

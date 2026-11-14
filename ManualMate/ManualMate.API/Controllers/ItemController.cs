@@ -10,8 +10,8 @@ namespace ManualMate.Controllers
     public class ItemController(IItemService itemService, IFileUploadService fileUploadService) : ControllerBase
     {
         #region CRUD
-        [HttpGet("{id:guid}")]
-        public async Task<IActionResult> GetItem(Guid id)
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetItem(int id)
         {
             var result = await itemService.GetItemAsync(id);
             return this.GetResponse(result);
@@ -31,28 +31,23 @@ namespace ManualMate.Controllers
             return this.GetResponse(result);
         }
 
-        [HttpPut("{id:guid}")]
-        public async Task<IActionResult> UpdateItem(Guid id, UpdateItemDto dto)
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> UpdateItem(int id, UpdateItemDto dto)
         {
             var result = await itemService.EditItemAsync(id, dto);
             return this.GetResponse(result);
         }
 
-        [HttpDelete("{id:guid}")]
-        public async Task<IActionResult> DeleteItem(Guid id)
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> DeleteItem(int id)
         {
             var result = await itemService.DeleteAsync(id);
             return this.GetResponse(result);
         } 
         #endregion
 
-        // Restored: this upload endpoint was dropped during an earlier refactor,
-        // leaving FileUploadService.UploadItemFileAsync as unreachable dead code.
-        // It replaces the stored manual for an existing item (kept under wwwroot/Files).
-        // NOTE: it only replaces the file - it does not re-trigger PDF processing,
-        // so existing embeddings are not regenerated (see project guide).
-        [HttpPost("upload-manual/{id:guid}")]
-        public async Task<IActionResult> UploadManual(Guid id, IFormFile file)
+        [HttpPost("upload-manual/{id:int}")]
+        public async Task<IActionResult> UploadManual(int id, IFormFile file)
         {
             var result = await fileUploadService.UploadItemFileAsync(id, file);
             return this.GetResponse(result);

@@ -2,6 +2,7 @@
 using ManualMate.Domain.Models;
 using ManualMate.Infrastructure.Messaging.Outbox;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace ManualMate.Infrastructure.Presistence
 {
@@ -17,6 +18,11 @@ namespace ManualMate.Infrastructure.Presistence
         public override async Task<int> SaveChangesAsync(CancellationToken ct = default)
         {
             return await base.SaveChangesAsync(ct);
+        }
+
+        public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken ct = default)
+        {
+            return Database.BeginTransactionAsync(ct);
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

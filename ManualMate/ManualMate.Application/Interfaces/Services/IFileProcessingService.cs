@@ -4,7 +4,7 @@ namespace ManualMate.Application.Interfaces.Services
 {
     public interface IFileProcessingService
     {
-        Task<Result<bool>> ProcessFileAsync(Guid itemId);
-        Task<Result<bool>> DeleteFileEmbeddingsAsync(Guid itemId);
+        Task<Result<bool>> ProcessFileAsync(int itemId);
+        Task<Result<bool>> DeleteFileEmbeddingsAsync(int itemId);
     }
 }

@@ -2,7 +2,7 @@
 {
     public record QuestionCache
     {
-        public Guid ItemId { get; set; }
+        public int ItemId { get; set; }
         public string Question { get; set; }
         public string Answer { get; set; }
     }

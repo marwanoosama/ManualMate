@@ -39,7 +39,7 @@ namespace ManualMate.Application.Services
             _ttl = TimeSpan.FromHours(double.Parse(configuration.GetSection("RedisSettings")["TimeToLiveInHours"]!));
         }
 
-        public async Task<Result<string>> GetAnswerAsync(Guid itemId, string question)
+        public async Task<Result<string>> GetAnswerAsync(int itemId, string question)
         {
             var item = await _dbContext.Items.FindAsync(itemId);
             if (item == null)
@@ -53,7 +53,7 @@ namespace ManualMate.Application.Services
             }
 
             var normalizedQuestion = string.Concat(question.Where(c => !char.IsWhiteSpace(c))).ToLower();
-            var cacheKey = $"question:{itemId}:{normalizedQuestion}";
+            var cacheKey = $"question:{itemId}:{item.LastUpdated.Ticks}:{normalizedQuestion}";
 
             var cachedQuestion = await _cache.GetAsync<QuestionCache>(cacheKey);
             if(cachedQuestion is not null)
