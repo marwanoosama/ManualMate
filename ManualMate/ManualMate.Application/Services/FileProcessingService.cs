@@ -23,23 +23,40 @@ namespace ManualMate.Application.Services
             }
 
             var pdfText = pdfTextExtractor.ExtractTextFromPdf(item.FilePath).Value;
-            var chunks = textChunker.ChunkText(pdfText).Value;
+            var chunks = textChunker.ChunkText(pdfText).Value
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .ToList();
 
-            for (var i = 0; i < chunks.Count; i++)
+            const int batchSize = 100;
+
+            for (var offset = 0; offset < chunks.Count; offset += batchSize)
             {
-                var embedding = await embeddingService.GetEmbeddingAsync(chunks[i]);
+                var batch = chunks.Skip(offset).Take(batchSize).ToList();
 
-                var newEmbedding = new FileEmbedding
+                var embeddings = await embeddingService.GetEmbeddingsAsync(batch);
+                if (!embeddings.Success || embeddings.Value is null)
                 {
-                    ItemId = itemId,
-                    TextChunk = chunks[i],
-                    Embedding = embedding.Value,
-                    ChunkIndex = i
-                };
+                    return Result<bool>.Fail(embeddings.Error ?? "Error generating embeddings", embeddings.StatusCode);
+                }
 
-                await dbContext.FileEmbeddings.AddAsync(newEmbedding);
+                for (var i = 0; i < batch.Count; i++)
+                {
+                    var newEmbedding = new FileEmbedding
+                    {
+                        ItemId = itemId,
+                        TextChunk = batch[i],
+                        Embedding = embeddings.Value[i],
+                        ChunkIndex = offset + i
+                    };
+
+                    await dbContext.FileEmbeddings.AddAsync(newEmbedding);
+                }
+
+                await dbContext.SaveChangesAsync();
             }
-            await dbContext.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+
             return Result<bool>.Ok(true);
         }
 

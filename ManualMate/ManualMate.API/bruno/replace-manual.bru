@@ -1,0 +1,15 @@
+meta {
+  name: Replace manual file
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{host}}/api/item/upload-manual/{{itemId}}
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  file: @file(../wwwroot/Files/DualSense_d0e5f9ced79b49c7acf9c6ced1daba01.pdf)
+}

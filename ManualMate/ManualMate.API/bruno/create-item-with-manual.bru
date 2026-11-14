@@ -1,0 +1,17 @@
+meta {
+  name: Create item + upload manual
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{host}}/api/item
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  name: LG Microwave
+  description: A microwave oven is a kitchen appliance that heats and cooks food by exposing it to electromagnetic radiation in the microwave frequency range
+  file: @file(../wwwroot/Files/LG_Microwave.pdf)
+}

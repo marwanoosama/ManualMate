@@ -1,0 +1,17 @@
+meta {
+  name: Edge - wrong file type (400)
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{host}}/api/item
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  name: Wrong Type
+  description: Uploading a text file on purpose
+  file: @file(../appsettings.json)
+}

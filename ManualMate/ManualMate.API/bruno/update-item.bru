@@ -1,0 +1,16 @@
+meta {
+  name: Update item (name/description)
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{host}}/api/item/{{itemId}}
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  name: LG Microwave Oven
+  description: Updated description to test the PUT endpoint
+}

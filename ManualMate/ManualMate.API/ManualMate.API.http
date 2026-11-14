@@ -1,0 +1,130 @@
+### ManualMate — manual endpoint tests (run in Rider / VS / VS Code REST Client)
+### Make sure the API is running: dotnet run --launch-profile http  (http://localhost:5035)
+
+@host = http://localhost:5035
+### Put a real item id here after creating one — or use the ready-to-go LG Microwave item
+### (already processed & askable, left in the DB after the Nov 14 setup)
+@itemId = 071d39f2-5a14-4361-92bc-7bddc6ee7b4a
+
+### 1. List items (after startup there should be exactly 1 seeded item: Samsung Galaxy S24)
+GET {{host}}/api/item
+
+### 2. Get one item (use a real id from the list above)
+GET {{host}}/api/item/{{itemId}}
+
+### 3. Create item + upload manual  → triggers async processing (RabbitMQ)
+###    Watch logs/ or the DB: Status goes Pending → Processing → Completed
+POST {{host}}/api/item
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="name"
+
+LG Microwave
+--WebAppBoundary
+Content-Disposition: form-data; name="description"
+
+A microwave oven is a kitchen appliance that heats and cooks food by exposing it to electromagnetic radiation in the microwave frequency range
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="LG_Microwave.pdf"
+Content-Type: application/pdf
+
+< ./wwwroot/Files/LG_Microwave.pdf
+--WebAppBoundary--
+
+### 4. Ask a question (works right away on the LG Microwave item — already Completed)
+GET {{host}}/api/item/ask/{{itemId}}?question=How do I set the clock?
+### Ask again → served from Redis cache (much faster the 2nd time)
+
+### 5. Edit item (name/description only; no file → just omit it)
+PUT {{host}}/api/item/{{itemId}}
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="name"
+
+LG Microwave Oven
+--WebAppBoundary
+Content-Disposition: form-data; name="description"
+
+Updated description for testing the PUT endpoint
+--WebAppBoundary--
+
+### 6. Replace the manual file of an existing item (restored endpoint)
+###    NOTE: replaces the file only — embeddings are NOT regenerated (see guide)
+POST {{host}}/api/item/upload-manual/{{itemId}}
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="DualSense.pdf"
+Content-Type: application/pdf
+
+< ./wwwroot/Files/DualSense_d0e5f9ced79b49c7acf9c6ced1daba01.pdf
+--WebAppBoundary--
+
+### 7. Delete item (also deletes its embeddings; the PDF file stays on disk)
+DELETE {{host}}/api/item/{{itemId}}
+
+### ---------- Edge cases ----------
+
+### 8. Non-existing item → 404
+GET {{host}}/api/item/00000000-0000-0000-0000-000000000001
+
+### 9. Create without file → 400 (validation: "File is required")
+POST {{host}}/api/item
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="name"
+
+No File Item
+--WebAppBoundary
+Content-Disposition: form-data; name="description"
+
+This request has no file on purpose
+--WebAppBoundary--
+
+### 10. Create with wrong file type → 400 ("File type .txt is not allowed")
+POST {{host}}/api/item
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="name"
+
+Wrong Type
+--WebAppBoundary
+Content-Disposition: form-data; name="description"
+
+Uploading a text file on purpose
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="notes.txt"
+Content-Type: text/plain
+
+< ./appsettings.json
+--WebAppBoundary--
+
+### 11. Oversized file (> 50 MB) → 400 from the app's own validation
+###     (Kestrel limit was raised to 60 MB so the app-level check is reachable)
+POST {{host}}/api/item
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="name"
+
+Too Big
+--WebAppBoundary
+Content-Disposition: form-data; name="description"
+
+dell service manual is ~52 MB on purpose
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="dell-g15-5520-service-manual-en-us.pdf"
+Content-Type: application/pdf
+
+< ./wwwroot/Files/dell-g15-5520-service-manual-en-us.pdf
+--WebAppBoundary--
+
+### 12. Ask on a not-yet-processed item → 400 "is not processed yet"
+GET {{host}}/api/item/ask/{{itemId}}?question=anything
+
+### 13. Swagger UI
+GET {{host}}/swagger/index.html

@@ -1,0 +1,16 @@
+meta {
+  name: Edge - create without file (400)
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{host}}/api/item
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  name: No File Item
+  description: This request has no file on purpose
+}

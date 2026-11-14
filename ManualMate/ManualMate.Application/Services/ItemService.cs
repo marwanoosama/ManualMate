@@ -13,7 +13,7 @@ namespace ManualMate.Application.Services
     public class ItemService(
         IApplicationDbContext dbContext,
         IFileUploadService fileUploadService,
-        IIntegrationEventBus eventBus,
+        IOutboxService outboxService,
         IMapper mapper)
         : IItemService
     {
@@ -48,9 +48,10 @@ namespace ManualMate.Application.Services
 
             await dbContext.Items.AddAsync(item);
 
-            await eventBus.PublishAsync(new ItemCreatedIntegrationEvent { ItemId = item.Id });
+            outboxService.Enqueue(new ItemCreatedMessage { ItemId = item.Id }, ItemCreatedMessage.RoutingKey);
 
             await dbContext.SaveChangesAsync();
+
             return Result<CreateItemDto>.Ok(dto);
         }
 

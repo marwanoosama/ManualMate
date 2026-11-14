@@ -1,0 +1,11 @@
+meta {
+  name: Delete item
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{host}}/api/item/{{itemId}}
+  body: none
+  auth: none
+}

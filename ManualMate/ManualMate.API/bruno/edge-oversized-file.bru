@@ -1,0 +1,17 @@
+meta {
+  name: Edge - oversized file > 50MB (400)
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{host}}/api/item
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  name: Too Big
+  description: The dell service manual is ~52 MB on purpose - expect the app-level 50 MB validation error
+  file: @file(../wwwroot/Files/dell-g15-5520-service-manual-en-us.pdf)
+}

@@ -2,9 +2,7 @@ using System.Net.Http.Headers;
 using System.Text.Json.Serialization;
 using ManualMate.API;
 using ManualMate.Application.Responses;
-using ManualMate.Infrastructure.Consumers;
 using ManualMate.Infrastructure.Presistence;
-using MassTransit;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -17,6 +15,13 @@ namespace ManualMate
         public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            // Kestrel's default body cap (~28.6 MB) silently rejects manuals bigger than that
+            // before FileUploadService's own 50 MB validation can run. Raise it above the app limit.
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                options.Limits.MaxRequestBodySize = 60 * 1024 * 1024; // 60 MB
+            });
 
             builder.Host.UseSerilog((context, configuration) =>
                 configuration
@@ -59,10 +64,10 @@ namespace ManualMate
                 client.BaseAddress = new Uri($"{modelUrl}{apiToken}");
             });
 
-            builder.Services.AddHttpClient("HuggingFaceClient", client =>
+            builder.Services.AddHttpClient("VoyageAIClient", client =>
             {
-                string modelUrl = builder.Configuration["HuggingFace:ModelUrl"]!;
-                string apiToken = builder.Configuration["HuggingFace:ApiToken"]!;
+                string modelUrl = builder.Configuration["VoyageAI:ModelUrl"]!;
+                string apiToken = builder.Configuration["VoyageAI:ApiToken"]!;
 
                 client.BaseAddress = new Uri(modelUrl);
                 client.DefaultRequestHeaders.Authorization =
