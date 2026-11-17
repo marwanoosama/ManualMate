@@ -27,10 +27,16 @@ namespace ManualMate.Application.Services
                 return Result<bool>.Fail($"Item with id : {itemId} not found", HttpStatusCode.NotFound);
             }
 
-            var pdfText = pdfTextExtractor.ExtractTextFromPdf(item.FilePath).Value;
+            var pdfTextResult = pdfTextExtractor.ExtractTextFromPdf(item.FilePath);
+            if (!pdfTextResult.Success || String.IsNullOrWhiteSpace(pdfTextResult.Value))
+            {
+                return Result<bool>.Fail(pdfTextResult.Error ?? "No text found in PDF.", HttpStatusCode.UnprocessableEntity);
+            }
+            var pdfText = pdfTextResult.Value;
             var chunks = textChunker.ChunkText(pdfText).Value
                 .Where(c => !string.IsNullOrWhiteSpace(c))
                 .ToList();
+            
 
             for (var offset = 0; offset < chunks.Count; offset += _batchSize)
             {
