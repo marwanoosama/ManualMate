@@ -46,11 +46,16 @@ namespace ManualMate.Application.Services
             }
             item.FilePath = uploadFileResult.Value;
 
+            await using var transaction = await dbContext.BeginTransactionAsync();
+
             await dbContext.Items.AddAsync(item);
+            await dbContext.SaveChangesAsync();
 
             outboxService.Enqueue(new ItemCreatedMessage { ItemId = item.Id }, ItemCreatedMessage.RoutingKey);
 
             await dbContext.SaveChangesAsync();
+
+            await transaction.CommitAsync();
 
             return Result<CreateItemDto>.Ok(dto);
         }

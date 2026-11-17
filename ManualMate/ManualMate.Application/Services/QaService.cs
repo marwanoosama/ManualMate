@@ -1,4 +1,5 @@
 ﻿using ManualMate.Application.DTOs;
+using ManualMate.Application.Enums;
 using ManualMate.Application.Interfaces;
 using ManualMate.Application.Interfaces.Services;
 using ManualMate.Application.Responses;
@@ -61,7 +62,7 @@ namespace ManualMate.Application.Services
                 return Result<string>.Ok(cachedQuestion.Answer);
             }
 
-            var questionEmbedding = await _embeddingService.GetEmbeddingAsync(question);
+            var questionEmbedding = await _embeddingService.GetEmbeddingAsync(question, EmbeddingInputType.Query);
 
             if (!questionEmbedding.Success)
             {

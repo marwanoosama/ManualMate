@@ -1,6 +1,8 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using ManualMate.Application.Enums;
 using ManualMate.Application.Interfaces.Services;
 using ManualMate.Application.Responses;
 using Microsoft.Extensions.Configuration;
@@ -9,9 +11,9 @@ namespace ManualMate.Infrastructure.Services
 {
     public class VoyageAIEmbeddingService(IHttpClientFactory clientFactory, IConfiguration configuration) : IEmbeddingService
     {
-        public async Task<Result<Pgvector.Vector>> GetEmbeddingAsync(string text)
+        public async Task<Result<Pgvector.Vector>> GetEmbeddingAsync(string text, EmbeddingInputType inputType)
         {
-            var result = await GetEmbeddingsAsync([text]);
+            var result = await GetEmbeddingsAsync([text], inputType);
 
             if (!result.Success || result.Value is null)
             {
@@ -26,11 +28,11 @@ namespace ManualMate.Infrastructure.Services
             return Result<Pgvector.Vector>.Ok(result.Value[0]);
         }
 
-        public async Task<Result<List<Pgvector.Vector>>> GetEmbeddingsAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken = default)
+        public async Task<Result<List<Pgvector.Vector>>> GetEmbeddingsAsync(IReadOnlyList<string> texts, EmbeddingInputType inputType, CancellationToken cancellationToken = default)
         {
             try
             {
-                var response = await GetVoyageResponse(texts);
+                var response = await SendWithRetryAsync(texts, inputType, cancellationToken);
 
                 var json = await response.Content.ReadAsStringAsync(cancellationToken);
 
@@ -61,13 +63,61 @@ namespace ManualMate.Infrastructure.Services
             }
         }
 
-        private async Task<HttpResponseMessage> GetVoyageResponse(IReadOnlyList<string> texts)
+        private async Task<HttpResponseMessage> SendWithRetryAsync(IReadOnlyList<string> texts, EmbeddingInputType inputType, CancellationToken cancellationToken)
+        {
+            var maxRetries = int.TryParse(configuration["VoyageAI:MaxRetries"], out var retries) ? retries : 5;
+            var baseDelaySeconds = double.TryParse(configuration["VoyageAI:RetryBaseDelaySeconds"], out var delay) ? delay : 21;
+
+            for (var attempt = 0; ; attempt++)
+            {
+                var response = await GetVoyageResponse(texts, inputType, cancellationToken);
+
+                if (response.IsSuccessStatusCode || attempt >= maxRetries || !IsRetryable(response.StatusCode))
+                {
+                    return response;
+                }
+
+                var waitSeconds = GetRetryAfterSeconds(response.Headers.RetryAfter)
+                    ?? Math.Min(baseDelaySeconds * Math.Pow(2, attempt), 120);
+
+                response.Dispose();
+
+                await Task.Delay(TimeSpan.FromSeconds(waitSeconds), cancellationToken);
+            }
+        }
+
+        private static bool IsRetryable(HttpStatusCode statusCode)
+        {
+            return statusCode == HttpStatusCode.TooManyRequests
+                || statusCode == HttpStatusCode.InternalServerError
+                || statusCode == HttpStatusCode.BadGateway
+                || statusCode == HttpStatusCode.ServiceUnavailable
+                || statusCode == HttpStatusCode.GatewayTimeout;
+        }
+
+        private static double? GetRetryAfterSeconds(RetryConditionHeaderValue? retryAfter)
+        {
+            if (retryAfter?.Delta is { } delta)
+            {
+                return delta.TotalSeconds;
+            }
+
+            if (retryAfter?.Date is { } date)
+            {
+                return Math.Max((date - DateTimeOffset.UtcNow).TotalSeconds, 0);
+            }
+
+            return null;
+        }
+
+        private async Task<HttpResponseMessage> GetVoyageResponse(IReadOnlyList<string> texts, EmbeddingInputType inputType, CancellationToken cancellationToken)
         {
             var payload = new
             {
                 input = texts,
                 model = configuration["VoyageAI:Model"],
-                output_dimension = 512
+                output_dimension = 512,
+                input_type = inputType.ToString().ToLowerInvariant()
             };
 
             var content = new StringContent(
@@ -77,7 +127,7 @@ namespace ManualMate.Infrastructure.Services
 
             var client = clientFactory.CreateClient("VoyageAIClient");
 
-            return await client.PostAsync("", content);
+            return await client.PostAsync("", content, cancellationToken);
         }
 
         private static bool TryExtractVoyageAnswer(string json, out List<Pgvector.Vector>? result)

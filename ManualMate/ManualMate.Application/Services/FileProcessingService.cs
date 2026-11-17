@@ -1,7 +1,9 @@
-﻿using ManualMate.Application.Interfaces;
+﻿using ManualMate.Application.Enums;
+using ManualMate.Application.Interfaces;
 using ManualMate.Application.Interfaces.Services;
 using ManualMate.Domain.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System.Net;
 using ManualMate.Application.Responses;
 
@@ -11,9 +13,12 @@ namespace ManualMate.Application.Services
         IApplicationDbContext dbContext,
         IEmbeddingService embeddingService,
         IPdfTextExtractor pdfTextExtractor,
-        ITextChunker textChunker)
+        ITextChunker textChunker,
+        IConfiguration configuration)
         : IFileProcessingService
     {
+        private readonly int _batchSize = int.TryParse(configuration["VoyageAI:DocumentBatchSize"], out var size) && size > 0 ? size : 64;
+
         public async Task<Result<bool>> ProcessFileAsync(int itemId)
         {
             var item = await dbContext.Items.FindAsync(itemId);
@@ -27,13 +32,11 @@ namespace ManualMate.Application.Services
                 .Where(c => !string.IsNullOrWhiteSpace(c))
                 .ToList();
 
-            const int batchSize = 100;
-
-            for (var offset = 0; offset < chunks.Count; offset += batchSize)
+            for (var offset = 0; offset < chunks.Count; offset += _batchSize)
             {
-                var batch = chunks.Skip(offset).Take(batchSize).ToList();
+                var batch = chunks.Skip(offset).Take(_batchSize).ToList();
 
-                var embeddings = await embeddingService.GetEmbeddingsAsync(batch);
+                var embeddings = await embeddingService.GetEmbeddingsAsync(batch, EmbeddingInputType.Document);
                 if (!embeddings.Success || embeddings.Value is null)
                 {
                     return Result<bool>.Fail(embeddings.Error ?? "Error generating embeddings", embeddings.StatusCode);
@@ -54,8 +57,6 @@ namespace ManualMate.Application.Services
 
                 await dbContext.SaveChangesAsync();
             }
-
-            return Result<bool>.Ok(true);
 
             return Result<bool>.Ok(true);
         }

@@ -34,6 +34,13 @@ namespace ManualMate.Infrastructure.Presistence
             modelBuilder.Entity<FileEmbedding>()
                 .Property(e => e.Embedding) 
                 .HasColumnType("vector(512)"); 
+            
+            modelBuilder.Entity<FileEmbedding>()
+                .HasIndex(e => e.Embedding)
+                .HasMethod("hnsw")
+                .HasOperators("vector_cosine_ops")
+                .HasStorageParameter("m", 16)
+                .HasStorageParameter("ef_construction", 64);
 
             modelBuilder.Entity<FileEmbedding>()
             .HasOne(e => e.item)
