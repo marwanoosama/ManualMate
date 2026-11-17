@@ -27,41 +27,22 @@
 ## System Design
 
 ```mermaid
-flowchart TB
-    Client["Client"]
+flowchart LR
+    U[User] --> API[REST API]
 
-    subgraph API["Backend API"]
-        direction LR
-        REST["REST Controllers"]
-        SVC["Core Services"]
-        BG["Background Workers"]
-    end
+    API --> PG[(PostgreSQL)]
+    API --> RD[(Redis)]
+    API --> MQ[RabbitMQ]
+    API --> FS[File Storage]
 
-    subgraph EXT["External Systems"]
-        DB[("Database<br/>metadata")]
-        VDB[("Vector Store<br/>chunks + embeddings")]
-        RD[("Cache")]
-        MQ{{"Message Broker"}}
-        AI["AI Services<br/>Embedding model • LLM"]
-        FS["File Storage"]
-    end
+    MQ --> W[Worker]
+    W --> AI[AI Services]
+    W --> VS[(Vector DB)]
+    W --> PG
 
-    %% Ingestion (async)
-    Client --> REST --> SVC
-    SVC -->|"save file"| FS
-    SVC -->|"tx: metadata + outbox row"| DB
-    BG -->|"poll outbox"| DB
-    BG -->|"publish event"| MQ
-    BG -->|"consume"| FS
-    BG -->|"extract → chunk → embed"| AI
-    BG -->|"store chunks + vectors"| VDB
-
-    %% QA (sync)
-    REST --> SVC2["Query Service"]
-    SVC2 -->|"cache check"| RD
-    SVC2 -->|"query embedding"| AI
-    SVC2 -->|"top-K chunks"| VDB
-    SVC2 -->|"context + question"| AI
+    U -->|ask| API
+    API --> VS
+    API --> AI
 ```
 
 **Key flows:**
