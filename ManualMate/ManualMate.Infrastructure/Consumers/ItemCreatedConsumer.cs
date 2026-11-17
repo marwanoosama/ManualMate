@@ -113,10 +113,6 @@ public sealed class ItemCreatedConsumer(
             return;
         }
 
-        await dbContext.FileEmbeddings
-            .Where(embedding => embedding.ItemId == message.ItemId)
-            .ExecuteDeleteAsync(cancellationToken);
-
         try
         {
             item.Status = ItemStatus.Processing;

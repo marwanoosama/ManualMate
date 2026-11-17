@@ -85,14 +85,19 @@ namespace ManualMate.Application.Services
             {
                 return Result<string>.Fail(answer.Error, answer.StatusCode);
             }
-
-            var questionToCache = new QuestionCache
+            
+            const string refusal = "I cannot answer this question based on the provided documents.";
+            if (!answer.Value.Contains(refusal))
             {
-                ItemId = itemId,
-                Question = question,
-                Answer = answer.Value
-            };
-            await _cache.SetAsync(cacheKey, questionToCache, _ttl);
+                var questionToCache = new QuestionCache
+                {
+                    ItemId = itemId,
+                    Question = question,
+                    Answer = answer.Value
+                };
+                
+                await _cache.SetAsync(cacheKey, questionToCache, _ttl);
+            }
 
             return Result<string>.Ok(answer.Value);
         }

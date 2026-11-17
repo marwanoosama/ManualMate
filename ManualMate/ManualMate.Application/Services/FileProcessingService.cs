@@ -36,7 +36,8 @@ namespace ManualMate.Application.Services
             var chunks = textChunker.ChunkText(pdfText).Value
                 .Where(c => !string.IsNullOrWhiteSpace(c))
                 .ToList();
-            
+
+            var allEmbeddings = new List<Pgvector.Vector>(chunks.Count);
 
             for (var offset = 0; offset < chunks.Count; offset += _batchSize)
             {
@@ -47,22 +48,23 @@ namespace ManualMate.Application.Services
                 {
                     return Result<bool>.Fail(embeddings.Error ?? "Error generating embeddings", embeddings.StatusCode);
                 }
-
-                for (var i = 0; i < batch.Count; i++)
-                {
-                    var newEmbedding = new FileEmbedding
-                    {
-                        ItemId = itemId,
-                        TextChunk = batch[i],
-                        Embedding = embeddings.Value[i],
-                        ChunkIndex = offset + i
-                    };
-
-                    await dbContext.FileEmbeddings.AddAsync(newEmbedding);
-                }
-
-                await dbContext.SaveChangesAsync();
+                
+                allEmbeddings.AddRange(embeddings.Value);
             }
+            
+            await using var trx = await dbContext.BeginTransactionAsync();
+            await dbContext.FileEmbeddings.Where(fe => fe.ItemId == itemId).ExecuteDeleteAsync();
+            
+            var rows = chunks.Select((c, i) => new FileEmbedding
+            {
+                ItemId = itemId,
+                TextChunk = c,
+                ChunkIndex = i,
+                Embedding = allEmbeddings[i],
+            });
+            dbContext.FileEmbeddings.AddRange(rows);
+            await dbContext.SaveChangesAsync();
+            await trx.CommitAsync();
 
             return Result<bool>.Ok(true);
         }
