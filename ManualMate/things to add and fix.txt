@@ -1,0 +1,2 @@
+1- use threshold to ensure the quality of used chunks
+2- add sources from pdf to the answers

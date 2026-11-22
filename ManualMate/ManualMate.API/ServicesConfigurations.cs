@@ -1,11 +1,13 @@
 using FluentValidation;
 using FluentValidation.AspNetCore;
+using Hangfire;
+using Hangfire.PostgreSql;
 using ManualMate.Application.Interfaces;
 using ManualMate.Application.Interfaces.Services;
 using ManualMate.Application.Mapping;
 using ManualMate.Application.Services;
 using ManualMate.Application.Validators;
-using ManualMate.Infrastructure.Messaging;
+using ManualMate.Infrastructure.Jobs;
 using ManualMate.Infrastructure.Presistence;
 using ManualMate.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
@@ -45,7 +47,12 @@ namespace ManualMate
             services.AddScoped<IPdfTextExtractor, PdfTextExtractor>();
             services.AddScoped<ITextChunker, TextChunker>();
 
-            services.AddRabbitMqMessaging(configuration);
+            services.AddHangfire(options => options
+                .UsePostgreSqlStorage(storage => storage.UseNpgsqlConnection(configuration.GetConnectionString("ManualMateDbContext"))));
+
+            services.AddHangfireServer(options => options.WorkerCount = 1);
+
+            services.AddSingleton<IItemProcessingScheduler, ItemProcessingScheduler>();
 
             services.AddAutoMapper(cfg => {}, typeof(MappingProfile));
 

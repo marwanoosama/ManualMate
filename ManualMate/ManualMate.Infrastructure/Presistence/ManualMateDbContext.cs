@@ -1,6 +1,5 @@
 ﻿using ManualMate.Application.Interfaces;
 using ManualMate.Domain.Models;
-using ManualMate.Infrastructure.Messaging.Outbox;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -13,7 +12,6 @@ namespace ManualMate.Infrastructure.Presistence
 
         public DbSet<Item> Items => Set<Item>();
         public DbSet<FileEmbedding> FileEmbeddings => Set<FileEmbedding>();
-        public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
         public override async Task<int> SaveChangesAsync(CancellationToken ct = default)
         {
@@ -47,9 +45,6 @@ namespace ManualMate.Infrastructure.Presistence
             .WithMany(p => p.FileEmbeddings)
             .HasForeignKey(e => e.ItemId)
             .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<OutboxMessage>()
-            .HasIndex(o => new { o.ProcessedOnUtc, o.OccurredOnUtc });
         }
     }
 }

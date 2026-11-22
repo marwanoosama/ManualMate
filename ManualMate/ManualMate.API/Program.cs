@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using ManualMate.API;
 using ManualMate.Application.Responses;
 using ManualMate.Infrastructure.Presistence;
+using Hangfire;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -108,6 +109,8 @@ namespace ManualMate
             app.UseCors("AllowFrontend");
 
             app.UseAuthorization();
+
+            app.UseHangfireDashboard("/hangfire");
 
             app.MapControllers();
 

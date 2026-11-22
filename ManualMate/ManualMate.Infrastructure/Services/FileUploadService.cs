@@ -1,5 +1,4 @@
 using System.Net;
-using ManualMate.Application.Contracts;
 using ManualMate.Application.Interfaces;
 using ManualMate.Application.Interfaces.Services;
 using ManualMate.Application.Responses;
@@ -20,18 +19,18 @@ namespace ManualMate.Infrastructure.Services
         private const long MaxFileSizeInBytes = 50 * 1024 * 1024;
 
         private readonly IApplicationDbContext _dbContext;
-        private readonly IOutboxService _outboxService;
+        private readonly IItemProcessingScheduler _itemProcessingScheduler;
         private readonly IHostEnvironment _environment;
         private readonly ILogger<FileUploadService> _logger;
         private readonly string _filesDirectory;
 
         public FileUploadService(IApplicationDbContext dbContext,
-            IOutboxService outboxService,
+            IItemProcessingScheduler itemProcessingScheduler,
             IHostEnvironment environment,
             ILogger<FileUploadService> logger)
         {
             _dbContext = dbContext;
-            _outboxService = outboxService;
+            _itemProcessingScheduler = itemProcessingScheduler;
             _environment = environment;
             _logger = logger;
             _filesDirectory = Path.Combine(_environment.ContentRootPath, "wwwroot", "Files");
@@ -63,9 +62,10 @@ namespace ManualMate.Infrastructure.Services
                 item.FilePath = filePath;
                 item.Status = ItemStatus.Pending;
                 item.LastUpdated = DateTime.UtcNow;
-                _outboxService.Enqueue(new ItemCreatedMessage { ItemId = item.Id }, ItemCreatedMessage.RoutingKey);
 
                 await _dbContext.SaveChangesAsync(cancellationToken);
+
+                _itemProcessingScheduler.Schedule(item.Id);
                 await DeleteFileBestEffortAsync(oldFilePath, cancellationToken);
                 
                 return Result<string>.Ok(filePath);

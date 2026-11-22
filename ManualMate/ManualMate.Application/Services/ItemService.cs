@@ -5,7 +5,6 @@ using ManualMate.Application.Interfaces.Services;
 using ManualMate.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
-using ManualMate.Application.Contracts;
 using ManualMate.Application.Responses;
 
 namespace ManualMate.Application.Services
@@ -13,7 +12,7 @@ namespace ManualMate.Application.Services
     public class ItemService(
         IApplicationDbContext dbContext,
         IFileUploadService fileUploadService,
-        IOutboxService outboxService,
+        IItemProcessingScheduler itemProcessingScheduler,
         IMapper mapper)
         : IItemService
     {
@@ -51,11 +50,9 @@ namespace ManualMate.Application.Services
             await dbContext.Items.AddAsync(item);
             await dbContext.SaveChangesAsync();
 
-            outboxService.Enqueue(new ItemCreatedMessage { ItemId = item.Id }, ItemCreatedMessage.RoutingKey);
-
-            await dbContext.SaveChangesAsync();
-
             await transaction.CommitAsync();
+
+            itemProcessingScheduler.Schedule(item.Id);
 
             return Result<CreateItemDto>.Ok(dto);
         }
