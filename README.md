@@ -240,7 +240,7 @@ In a test on a PS5 manual:
 ### 1. Clone and Restore
 
 ```bash
-git clone https://github.com/bettercallmarwan/ManualMate.git
+git clone https://github.com/marwanoosama/ManualMate.git
 cd ManualMate/ManualMate
 dotnet restore
 ```
