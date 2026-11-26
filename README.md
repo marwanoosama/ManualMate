@@ -1,5 +1,4 @@
-# ManualMate
-
+<h1 align="center">ManualMate</h1>
 
 <p align="center">
   <img src="assets/RAG.png" alt="Web-based RAG Preview" width="550">
