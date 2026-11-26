@@ -10,120 +10,106 @@
 </p>
 
 <p align="center">
-  <strong>RAG-Powered PDF Manuals Q&A System</strong><br>
-  A .NET Full Stack Web Application for processing PDF user manuals, generating embeddings asynchronously with RabbitMQ, and providing a Q&A service using Retrieval Augmented Generation (RAG), with integrated PostgreSQL vector search and Redis caching.
+  <strong>PDF Manuals Q&A with RAG</strong><br>
+  Upload a PDF manual, it gets processed in the background with Hangfire, then you can ask questions about it.
+  Built with .NET 10, PostgreSQL (pgvector), Redis, Voyage AI, Gemini, and a React frontend.
 </p>
 
 ---
 
-## Table of Contents
-
-* [System Design](#system-design)
-* [Features](#features)
-* [Architecture](#architecture)
-* [Usage](#usage)
-* [Performance](#performance)
-* [Key Components](#key-components)
-* [Requirements](#requirements)
-* [Setup](#setup)
-
----
-
-## System Design
+## How it works
 
 ```mermaid
 flowchart LR
     U[User] --> API[REST API]
 
-    API --> PG[(PostgreSQL)]
+    API --> PG[(PostgreSQL + pgvector)]
     API --> RD[(Redis)]
-    API --> MQ[RabbitMQ]
     API --> FS[File Storage]
 
-    MQ --> W[Worker]
-    W --> AI[AI Services]
-    W --> VS[(Vector DB)]
-    W --> PG
+    API -->|enqueue job| HF[Hangfire]
+    HF --> J[Processing Job]
+    J --> AI[AI Services]
+    J --> PG
 
     U -->|ask| API
-    API --> VS
     API --> AI
 ```
 
-**Key flows:**
+Two flows:
 
-* **Ingestion (async):** file upload → save → transactional outbox → broker → worker extracts, chunks, embeds, stores vectors
-* **QA (sync):** question → cache → miss → embed question → retrieve top-K chunks → LLM answers → cached
+* **Upload (background):** save item + PDF → enqueue Hangfire job → job extracts the text, chunks it, generates embeddings, and stores them in pgvector
+* **Ask (real time):** check Redis → on miss, embed the question → find the top chunks in pgvector → Gemini writes the answer → answer gets cached
 
-Full version: [docs/system-design.md](docs/system-design.md)
+More detail: [docs/system-design.md](docs/system-design.md)
 
 ---
 
 ## Features
 
-* **Retrieval Augmented Generation (RAG):** Implements a Q&A system for user manuals by retrieving relevant information and augmenting an LLM's response.
-* **Asynchronous PDF Processing:** Uses RabbitMQ to process uploaded manuals asynchronously without blocking the API request.
-* **Message-Based Processing:** When a new manual is created, its ID is published to a RabbitMQ queue and processed by a background consumer.
-* **Smart Vector Storage (pgvector):** Uses PostgreSQL with `pgvector` to perform fast similarity searches directly in the database.
-* **Text Chunking and Embedding:** Processes manual content into chunks and generates embeddings using Hugging Face models (`bge-small-en-v1.5`).
-* **Caching with Redis:** Stores answers to repeated questions for faster retrieval.
-* **PDF Extraction:** Extracts text content from PDF manuals.
-* **RESTful API:** Provides clean endpoints for managing manuals and asking questions.
+* **Background processing with Hangfire:** uploaded manuals are processed by a background job instead of blocking the HTTP request. Jobs are stored in PostgreSQL, so there is no message broker to install or run.
+* **RAG Q&A:** answers come from the manual's own content, using vector similarity search plus Gemini.
+* **Vector search with pgvector:** embeddings live in PostgreSQL and are searched with cosine distance through an HNSW index, right inside the database.
+* **Voyage AI embeddings:** manual chunks and questions are turned into 512-dimension vectors with `voyage-3.5-lite`.
+* **PDF extraction with PdfPig:** text is pulled out of the PDF and split into ~1000 character chunks with 150 characters of overlap.
+* **Redis caching:** repeated questions are answered from cache (24h TTL). The cache key includes the item's last-updated time, so replacing a manual invalidates old answers.
+* **Item status tracking:** every item goes through `Pending → Processing → Completed / Failed`. Q&A only answers once a manual is `Completed`.
+* **React frontend:** upload manuals and chat with them from a simple UI.
+* **Hangfire dashboard:** watch job state at `/hangfire`.
 
 ---
 
-## Architecture
+## Background processing
 
-Manual processing is handled asynchronously using **RabbitMQ**.
+When a manual is uploaded, the API saves the item and the PDF, enqueues a Hangfire job, and returns immediately. The job does the slow work on its own.
 
-Instead of making the client wait while the PDF is extracted, chunked, and embedded, the API publishes a message containing the manual's ID to a RabbitMQ queue and immediately returns a successful response.
-
-A background consumer then receives the message and performs the potentially expensive PDF processing and embedding generation.
-
-### Manual Processing Flow
+### Manual processing flow
 
 ```text
 Client
   │
-  │ Create / Upload Manual
+  │ Upload Manual
   ▼
 API
   │
-  │ 1. Save Manual
-  │ 2. Publish Manual ID
+  │ 1. Save Item + PDF
+  │ 2. Enqueue Job (item ID)
+  │ 3. Return Response
   ▼
-RabbitMQ Queue
+Hangfire (jobs stored in PostgreSQL)
   │
-  │ Manual ID
   ▼
-Background Consumer
+ItemProcessingJob
   │
-  ├── Retrieve Manual
-  ├── Extract PDF Text
+  ├── Status → Processing
+  ├── Extract PDF Text (PdfPig)
   ├── Split Text into Chunks
-  ├── Generate Embeddings
-  └── Store Chunks + Embeddings
-             │
-             ▼
-        PostgreSQL
-        + pgvector
+  ├── Generate Embeddings (Voyage AI)
+  ├── Store Chunks + Embeddings
+  └── Status → Completed
+              │
+              ▼
+        PostgreSQL + pgvector
 ```
 
-### Why RabbitMQ?
+### Why Hangfire?
 
-PDF extraction and embedding generation can be relatively expensive operations. Performing them directly inside the HTTP request would force the client to wait until the entire process finishes.
+PDF extraction and embedding generation are slow. Doing them inside the HTTP request would make the client wait for the whole pipeline to finish.
 
-RabbitMQ decouples manual creation from manual processing:
+With Hangfire:
 
-1. The API receives the request and creates the manual.
-2. The manual ID is published to a RabbitMQ queue.
-3. The API immediately returns a success response.
-4. A background consumer receives the manual ID.
-5. The consumer retrieves and processes the PDF.
-6. Text chunks and their embeddings are stored in PostgreSQL.
-7. The manual becomes available for semantic Q&A.
+1. The API receives the upload and saves the item and the PDF.
+2. It enqueues `ItemProcessingJob` with the item ID and returns a success response.
+3. A Hangfire worker picks up the job and processes the PDF.
+4. Chunks and embeddings are stored in PostgreSQL.
+5. The item status becomes `Completed` and it's ready for Q&A. If something fails, the status becomes `Failed`.
 
-This makes the API more responsive and allows manual processing to happen independently in the background.
+A few notes on how it's set up:
+
+* Jobs are stored in the same PostgreSQL database as the app data (Hangfire PostgreSql storage). No RabbitMQ, no extra broker.
+* There is a single worker, so one item is processed at a time.
+* Jobs don't retry automatically. If processing fails, the item is marked `Failed` instead of getting stuck in `Processing`.
+* You can see it all at `http://localhost:5035/hangfire`.
 
 ---
 
@@ -133,41 +119,17 @@ This makes the API more responsive and allows manual processing to happen indepe
   <img src="assets/ManualMate Manual Management.png" alt="Manual management" width="950">
 </p>
 
-### Upload Product Manual
+### Upload a Manual
 
-`POST /api/product/upload-manual/{id}`
+`POST /api/item`
 
-The manual is uploaded and associated with the product.
+Multipart form with `name`, `description`, and the PDF `file`. The item is created with status `Pending`, the PDF is saved, and a processing job is enqueued right away. The API responds before the PDF is actually processed.
 
-When a new manual/product is created, the API publishes a message containing the manual's ID to RabbitMQ.
+You can also replace the manual of an existing item:
 
-**Example message:**
+`POST /api/item/upload-manual/{id}`
 
-```json
-{
-  "itemId": 8
-}
-```
-
-The API does not wait for PDF extraction or embedding generation to finish. Instead, it returns a successful response after the message has been successfully published.
-
----
-
-### Background Manual Processing
-
-After the message is placed on the RabbitMQ queue, a background consumer processes the manual.
-
-The consumer:
-
-1. Retrieves the manual using the provided ID.
-2. Extracts text from the PDF.
-3. Splits the text into smaller chunks.
-4. Generates embeddings for each chunk using `bge-small-en-v1.5`.
-5. Stores the chunks and embeddings in PostgreSQL using `pgvector`.
-
-This processing happens independently from the original HTTP request.
-
----
+This re-schedules the job, puts the item back in `Pending`, and deletes the old embeddings before the new ones are stored.
 
 ### Ask Questions
 
@@ -179,32 +141,29 @@ This processing happens independently from the original HTTP request.
   <img src="assets/Manual Mate Chat Example 2.png" alt="chat example" width="950">
 </p>
 
-Once the manual has been processed and its embeddings are stored, questions can be asked against the manual:
+Once the item is `Completed`:
 
-`POST /api/product/ask/{id}?question=How do I reset the device?`
+`GET /api/item/ask/{id}?question=How do I reset the device?`
 
 **Response:**
 
 ```json
 {
-  "question": "How do I reset the device?",
-  "answer": "According to the manual, press and hold the reset button for 5 seconds until the LED blinks."
+  "data": "According to the manual, press and hold the reset button for 5 seconds until the LED blinks."
 }
 ```
 
-The Q&A flow uses vector similarity search to retrieve the most relevant chunks from the manual before sending the retrieved context to the LLM.
+The question is embedded, the top 7 most similar chunks are pulled from pgvector, and those chunks are sent to Gemini as context. Only the manual's own content is used to answer.
 
 ---
 
 ## Performance
 
-Performance is optimized through **PostgreSQL with pgvector**, **Redis caching**, and asynchronous processing with **RabbitMQ**.
+Three things keep it fast: background processing (Hangfire), vector search in the database (pgvector), and cached answers (Redis).
 
-### 1. Asynchronous Processing (RabbitMQ)
+### 1. Background Processing (Hangfire)
 
-RabbitMQ prevents expensive PDF processing and embedding generation from blocking the API request.
-
-**Without RabbitMQ:**
+Without background processing, the client waits for everything:
 
 ```text
 HTTP Request
@@ -218,25 +177,20 @@ HTTP Request
 HTTP Response
 ```
 
-The client has to wait for the entire processing pipeline to finish.
-
-**With RabbitMQ:**
+With Hangfire, the API only saves and enqueues, then responds:
 
 ```text
 HTTP Request
      │
-     ├── Save Manual
-     ├── Publish Message
+     ├── Save Item + PDF
+     ├── Enqueue Job
      │
      ▼
 HTTP Success Response
 
      ...
 
-RabbitMQ
-     │
-     ▼
-Consumer
+Hangfire Job
      │
      ├── PDF Extraction
      ├── Chunking
@@ -244,184 +198,107 @@ Consumer
      └── Database Storage
 ```
 
-The API can respond immediately while the consumer handles the expensive work in the background.
-
 ### 2. Vector Search Speed (PostgreSQL + pgvector)
 
-By using `pgvector`, similarity searches are performed directly by PostgreSQL instead of manually loading all embeddings into application memory.
-
-* **Old Way:** Loaded all data into memory to find matching chunks.
-* **New Way (pgvector):** Uses PostgreSQL vector search and HNSW indexes to efficiently find relevant chunks without loading unnecessary data into application memory.
+Similarity search runs inside PostgreSQL with an HNSW index, so the app doesn't have to load all embeddings into memory to find matches.
 
 ### 3. Caching Impact (Redis)
 
-We cache final answers to prevent repeated questions from triggering the entire RAG pipeline again.
+Answers are cached for 24 hours, so repeated questions skip the embedding + search + LLM pipeline entirely.
 
-**Example Request:**
+In a test on a PS5 manual:
 
-`GET .../ask/8?question=how to sleep`
-
-*(PlayStation 5 manual)*
-
-* **First Request (Database Search):** ~2782 ms
-* **Second Request (Redis Cache):** ~45 ms
-
-**Result: ~98% faster** for repeated questions.
+* **First request (full pipeline):** ~2782 ms
+* **Second request (from Redis):** ~45 ms
 
 ---
 
 ## Key Components
 
-### 1. RAG Service (`ManualQaService.cs`)
-
-* Coordinates the question-answering flow.
-* Performs vector similarity searches.
-* Retrieves relevant manual chunks.
-* Sends the retrieved context to the LLM.
-
-### 2. RabbitMQ Message Broker
-
-* Decouples manual creation from PDF processing.
-* Publishes the manual/item ID to a queue.
-* Allows the API to return a successful response without waiting for processing to complete.
-* Provides messages to the background consumer for asynchronous processing.
-
-### 3. Manual Processing Consumer
-
-* Consumes manual IDs from RabbitMQ.
-* Retrieves the corresponding manual.
-* Extracts text from the PDF.
-* Splits the extracted text into chunks.
-* Generates embeddings for the chunks.
-* Stores the processed chunks and embeddings in PostgreSQL.
-
-### 4. Database Service (`PostgreSQL + pgvector`)
-
-* Stores manual content and vector embeddings.
-* Performs cosine-distance similarity searches.
-* Uses `pgvector` to efficiently retrieve relevant manual chunks.
-
-### 5. Caching Service (`RedisService.cs`)
-
-* Caches generated answers.
-* Returns previously generated answers without repeating the vector search and LLM generation pipeline.
-
-### 6. Embedding Service (`HuggingFaceEmbeddingService.cs`)
-
-* Converts text chunks into 384-dimensional vectors using `bge-small-en-v1.5`.
-
-### 7. LLM Service (`GeminiLlmService.cs`)
-
-* Generates natural language answers using Google Gemini.
-* Uses the relevant manual chunks retrieved by the RAG pipeline as context.
+* **`ItemProcessingScheduler` / `ItemProcessingJob`** — enqueue and run the background processing job (Hangfire).
+* **`FileProcessingService`** — the pipeline: extract text with PdfPig, chunk it (1000 chars, 150 overlap), embed in batches of 64, then store the chunks and embeddings in one DB transaction.
+* **`QaService`** — the RAG flow: cache → embed question → pgvector search → Gemini → cache.
+* **`VoyageAIEmbeddingService`** — converts text into 512-dimension vectors with `voyage-3.5-lite`. Retries on rate limits with backoff.
+* **`GeminiLlmService`** — generates the answers with Gemini 2.5 Flash Lite.
+* **`RedisCacheService`** — caches answers with a 24h TTL.
+* **PostgreSQL + pgvector** — items, chunks, and embeddings (`vector(512)` column) with an HNSW cosine index.
 
 ---
 
 ## Requirements
 
-### System Requirements
-
-* **.NET 8.0 SDK** or later
-* **PostgreSQL** with the `pgvector` extension enabled
+* **.NET 10 SDK**
+* **PostgreSQL** with the `pgvector` extension (the migrations enable it)
 * **Redis**
-* **RabbitMQ**
-
-### API Keys
-
-* **Hugging Face API Token** — used for generating embeddings.
-* **Google Gemini API Key** — used for answer generation.
+* **Voyage AI API token** — embeddings
+* **Google Gemini API key** — answers
 
 ---
 
 ## Setup
 
-### 1. Clone Repository
+### 1. Clone and Restore
 
 ```bash
-git clone
-cd manualmate
-```
-
-### 2. Install Dependencies
-
-```bash
+git clone https://github.com/bettercallmarwan/ManualMate.git
+cd ManualMate/ManualMate
 dotnet restore
 ```
 
-### 3. Infrastructure Services
+### 2. Postgres + Redis
 
-ManualMate requires the following infrastructure services:
+Run them locally, or use the included compose file:
 
-* PostgreSQL
-* Redis
-* RabbitMQ
+```bash
+docker compose up -d postgres redis
+```
 
-Make sure all three services are running before starting the application.
+### 3. Configure the API
 
----
-
-### 4. Database Setup (PostgreSQL)
-
-Ensure PostgreSQL is installed. Update `appsettings.json` with your credentials:
+Fill in `ManualMate.API/appsettings.json`:
 
 ```json
 {
   "ConnectionStrings": {
-    "ManualMateDbContext": "",
-    "Redis": ""
-  }
-}
-```
-
-Run migrations:
-
-```bash
-dotnet ef database update
-```
-
-The migration automatically enables the PostgreSQL `vector` extension.
-
----
-
-### 5. RabbitMQ Configuration
-
-Configure the RabbitMQ connection in `appsettings.json`:
-
-```json
-{
-  "RabbitMQ": {
-    "Host": "",
-    "Username": "",
-    "Password": ""
-  }
-}
-```
-
-The application uses RabbitMQ to publish manual IDs when new manuals are created. The background consumer listens to the queue and processes the corresponding PDFs.
-
----
-
-### 6. Configure API Keys
-
-Add the required API keys to `appsettings.json`:
-
-```json
-{
-  "HuggingFace": {
-    "ApiToken": ""
+    "ManualMateDbContext": "Host=localhost;Port=5432;Database=ManualMate;Username=postgres;Password=your_password",
+    "Redis": "localhost:6379"
+  },
+  "VoyageAI": {
+    "ApiToken": "your_voyage_ai_token"
   },
   "Gemini": {
-    "ApiKey": ""
+    "GeminiToken": "your_gemini_api_key"
   }
 }
 ```
 
----
+Migrations are applied automatically on startup, so there's nothing to run by hand. On first start the app also seeds a sample item if the database is empty.
 
-### 7. Run Application
+### 4. Run the API
 
 ```bash
+cd ManualMate.API
 dotnet run
 ```
 
-Once the application is running, create/upload a manual. The API will publish the manual ID to RabbitMQ and return a successful response immediately. The consumer will then process the PDF and generate the embeddings asynchronously.
+The API is at `http://localhost:5035`, Swagger at `/swagger`, and the Hangfire dashboard at `/hangfire`.
+
+### 5. Run the Frontend
+
+```bash
+cd client
+npm install
+npm run dev
+```
+
+The UI is at `http://localhost:3000` and proxies `/api` calls to the backend.
+
+### Docker
+
+Or run everything at once (Postgres, Redis, API, frontend):
+
+```bash
+docker compose up
+```
+
+Frontend: `http://localhost:3000` — API: `http://localhost:5035`

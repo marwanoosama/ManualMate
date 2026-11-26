@@ -4,22 +4,20 @@
 flowchart LR
     U[User] --> API[REST API]
 
-    API --> PG[(PostgreSQL)]
+    API --> PG[(PostgreSQL + pgvector)]
     API --> RD[(Redis)]
-    API --> MQ[RabbitMQ]
     API --> FS[File Storage]
 
-    MQ --> W[Worker]
-    W --> AI[AI Services]
-    W --> VS[(Vector DB)]
-    W --> PG
+    API -->|enqueue job| HF[Hangfire]
+    HF --> J[Processing Job]
+    J --> AI[AI Services]
+    J --> PG
 
     U -->|ask| API
-    API --> VS
     API --> AI
 ```
 
 ## Key Flows
 
-- **Ingestion (async):** upload → save file → transactional outbox → RabbitMQ → worker extracts, chunks, embeds, stores vectors
-- **QA (sync):** question → Redis cache → miss → embed question → top-K chunks from Vector DB → LLM answers → cached
+- **Ingestion (async):** upload → save item + file → enqueue Hangfire job → job extracts, chunks, embeds, stores vectors
+- **QA (sync):** question → Redis cache → miss → embed question → top-K chunks from pgvector → LLM answers → cached

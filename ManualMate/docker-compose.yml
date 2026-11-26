@@ -29,22 +29,6 @@ services:
       timeout: 5s
       retries: 5
 
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: manualmate-rabbitmq
-    restart: always
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-05052004}
-    ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
-    healthcheck:
-      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   api:
     build:
       context: .
@@ -57,10 +41,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__ManualMateDbContext: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-ManualMate};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-05052004}"
       ConnectionStrings__Redis: "redis:6379"
-      RabbitMQ__Host: "rabbitmq"
-      RabbitMQ__Username: "${RABBITMQ_USER:-admin}"
-      RabbitMQ__Password: "${RABBITMQ_PASS:-05052004}"
-      HuggingFace__ApiToken: "${HUGGINGFACE_API_TOKEN}"
+      VoyageAI__ApiToken: "${VOYAGEAI_API_TOKEN}"
       Gemini__GeminiToken: "${GEMINI_API_TOKEN}"
     volumes:
       - upload_data:/app/wwwroot/Files
@@ -68,8 +49,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
 
   client:
