@@ -1,7 +1,13 @@
 # ManualMate
 
+
 <p align="center">
   <img src="assets/RAG.png" alt="Web-based RAG Preview" width="550">
+  <br><br>
+  <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=.net&logoColor=white" alt=".NET">
+  <img src="https://img.shields.io/badge/PostgreSQL-15+-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white" alt="Redis">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
 </p>
 
 <p align="center">
